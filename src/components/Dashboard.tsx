@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEmailStore } from '@/lib/store';
 import { TrackedEmail } from '@/types';
@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, Inbox, CheckCircle, Send, Clock, Loader2, AlertTriangle } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { MoreHorizontal, Inbox, CheckCircle, Send, Clock, Loader2, AlertTriangle, FileText } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -30,46 +31,70 @@ const statusConfig = {
   },
 };
 const EmailTableRow = ({ email }: { email: TrackedEmail }) => {
+  const [isDraftVisible, setDraftVisible] = useState(false);
   const updateEmailStatus = useEmailStore((state) => state.updateEmailStatus);
   const config = statusConfig[email.status];
   return (
-    <motion.tr
-      layout
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      transition={{ duration: 0.3, ease: 'easeInOut' }}
-      className="hover:bg-muted/50 transition-colors"
-    >
-      <TableCell>
-        <div className="font-medium">{email.recipient}</div>
-        <div className="text-sm text-muted-foreground hidden md:block">{email.subject}</div>
-      </TableCell>
-      <TableCell className="hidden lg:table-cell">
-        <div>{format(email.sentAt, 'MMM d, yyyy')}</div>
-        <div className="text-sm text-muted-foreground">{formatDistanceToNow(email.sentAt, { addSuffix: true })}</div>
-      </TableCell>
-      <TableCell className="hidden sm:table-cell text-center">{email.followUpInterval} days</TableCell>
-      <TableCell>
-        <Badge variant="outline" className={cn("font-semibold", config.color)}>
-          <config.icon className="mr-1.5 h-3.5 w-3.5" />
-          {config.label}
-        </Badge>
-      </TableCell>
-      <TableCell className="text-right">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => updateEmailStatus(email.id, 'WAITING')}>Mark as Waiting</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => updateEmailStatus(email.id, 'REPLIED')}>Mark as Replied</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </TableCell>
-    </motion.tr>
+    <>
+      <motion.tr
+        layout
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        className="hover:bg-muted/50 transition-colors"
+      >
+        <TableCell>
+          <div className="font-medium">{email.recipient}</div>
+          <div className="text-sm text-muted-foreground hidden md:block">{email.subject}</div>
+        </TableCell>
+        <TableCell className="hidden lg:table-cell">
+          <div>{format(new Date(email.sentAt), 'MMM d, yyyy')}</div>
+          <div className="text-sm text-muted-foreground">{formatDistanceToNow(new Date(email.sentAt), { addSuffix: true })}</div>
+        </TableCell>
+        <TableCell className="hidden sm:table-cell text-center">{email.followUpInterval} days</TableCell>
+        <TableCell>
+          <Badge variant="outline" className={cn("font-semibold", config.color)}>
+            <config.icon className="mr-1.5 h-3.5 w-3.5" />
+            {config.label}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-right">
+          <div className="flex items-center justify-end gap-2">
+            {email.status === 'FOLLOW_UP_SENT' && email.followUpContent && (
+              <Button variant="outline" size="sm" onClick={() => setDraftVisible(true)}>
+                <FileText className="mr-2 h-4 w-4" />
+                View Draft
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => updateEmailStatus(email.id, 'WAITING')}>Mark as Waiting</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => updateEmailStatus(email.id, 'REPLIED')}>Mark as Replied</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </TableCell>
+      </motion.tr>
+      <Dialog open={isDraftVisible} onOpenChange={setDraftVisible}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>AI-Generated Follow-up Draft</DialogTitle>
+            <DialogDescription>
+              This draft was generated for your email to "{email.recipient}" with the subject "{email.subject}".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 p-4 bg-muted rounded-md border text-sm whitespace-pre-wrap">
+            {email.followUpContent}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 const EmptyState = () => (
@@ -116,18 +141,11 @@ export function Dashboard() {
     fetchEmails: state.fetchEmails,
   }));
   useEffect(() => {
-    // This effect will run on mount and fetch emails.
-    // The store already calls this once, but this is a good pattern for components
-    // that need to trigger a fetch.
-    if (emails.length === 0 && !isLoading) {
-        fetchEmails();
-    }
-    // Set up an interval to re-fetch data periodically to keep it fresh
     const interval = setInterval(() => {
         fetchEmails();
-    }, 60000); // every minute
+    }, 30000); // every 30 seconds
     return () => clearInterval(interval);
-  }, [fetchEmails, emails.length, isLoading]);
+  }, [fetchEmails]);
   const sortedEmails = [...emails].sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
   const renderContent = () => {
     if (isLoading && emails.length === 0) {
@@ -172,7 +190,7 @@ export function Dashboard() {
           </p>
         </div>
         <div className="flex-shrink-0 flex items-center gap-2">
-            {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+            {isLoading && emails.length > 0 && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
             <TrackEmailDialog />
         </div>
       </div>

@@ -11,6 +11,7 @@ export interface TrackedEmail {
   sentAt: Date | string; // Allow string for serialization
   followUpInterval: number; // in days
   status: EmailStatus;
+  followUpContent?: string;
 }
 export interface EmailTrackerState {
   emails: TrackedEmail[];

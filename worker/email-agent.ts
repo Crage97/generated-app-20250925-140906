@@ -1,48 +1,54 @@
 import { Agent } from 'agents';
 import type { Env } from './core-utils';
 import type { EmailTrackerState, TrackedEmail, EmailStatus } from './types';
-// Using a simple date-fns alternative for worker environment
+import { generateFollowUpDraft } from './ai';
 const addDays = (date: Date, days: number): Date => {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
 };
-const isAfter = (date1: Date, date2: Date): boolean => {
-  return date1.getTime() > date2.getTime();
-};
 export class EmailTrackerAgent extends Agent<Env, EmailTrackerState> {
   initialState: EmailTrackerState = {
     emails: [],
   };
-  private checkFollowUps(): void {
+  async alarm(): Promise<void> {
     const now = new Date();
     let changed = false;
-    const updatedEmails = this.state.emails.map(email => {
+    const emailUpdatePromises = this.state.emails.map(async (email) => {
       if (email.status === 'WAITING') {
         const sentAt = typeof email.sentAt === 'string' ? new Date(email.sentAt) : email.sentAt;
         const followUpDate = addDays(sentAt, email.followUpInterval);
-        if (isAfter(now, followUpDate)) {
+        if (now.getTime() >= followUpDate.getTime()) {
           changed = true;
-          return { ...email, status: 'FOLLOW_UP_SENT' as EmailStatus };
+          try {
+            const draft = await generateFollowUpDraft(this.env, email);
+            return { ...email, status: 'FOLLOW_UP_SENT' as EmailStatus, followUpContent: draft };
+          } catch (error) {
+            console.error(`Failed to generate draft for email ${email.id}:`, error);
+            // Still mark as sent, but with an error message in the content
+            return { ...email, status: 'FOLLOW_UP_SENT' as EmailStatus, followUpContent: "Error: Could not generate AI draft." };
+          }
         }
       }
       return email;
     });
+    const updatedEmails = await Promise.all(emailUpdatePromises);
     if (changed) {
       this.setState({ emails: updatedEmails });
     }
-  }
-  async onStart(): Promise<void> {
-    // Periodically check for follow-ups.
-    // In a real production app, this would be better handled by Alarms.
-    this.ctx.setInterval(() => this.checkFollowUps(), 60000); // Every minute
+    // Set the next alarm
+    await this.ctx.storage.setAlarm(Date.now() + 60 * 60 * 1000); // Check again in 1 hour
   }
   async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method;
     try {
+      // Ensure an alarm is set if it doesn't exist
+      const currentAlarm = await this.ctx.storage.getAlarm();
+      if (currentAlarm === null) {
+        await this.ctx.storage.setAlarm(Date.now() + 5000); // Set initial alarm 5s from now
+      }
       if (method === 'GET' && url.pathname === '/') {
-        this.checkFollowUps(); // Check on every fetch
         return Response.json({ success: true, data: { emails: this.state.emails } });
       }
       if (method === 'POST' && url.pathname === '/') {

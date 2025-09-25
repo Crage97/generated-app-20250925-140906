@@ -1,6 +1,6 @@
 import { TrackedEmail, EmailStatus } from '@/types';
 const API_BASE = '/api';
-export type AddEmailPayload = Omit<TrackedEmail, 'id' | 'status'>;
+export type AddEmailPayload = Omit<TrackedEmail, 'id' | 'status' | 'followUpContent'>;
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: 'An unknown error occurred' }));

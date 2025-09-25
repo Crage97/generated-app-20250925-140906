@@ -6,4 +6,5 @@ export interface TrackedEmail {
   sentAt: Date;
   followUpInterval: number; // in days
   status: EmailStatus;
+  followUpContent?: string;
 }

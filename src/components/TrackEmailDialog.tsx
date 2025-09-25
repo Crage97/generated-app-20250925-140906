@@ -35,8 +35,8 @@ import { Calendar as CalendarIcon, PlusCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useEmailStore } from '@/lib/store';
 const formSchema = z.object({
-  recipient: z.string({ required_error: 'Recipient email is required.' }).email({ message: 'Please enter a valid email.' }),
-  subject: z.string({ required_error: 'Subject is required.' }).min(3, { message: 'Subject must be at least 3 characters.' }),
+  recipient: z.string().min(1, { message: 'Recipient email is required.' }).email({ message: 'Please enter a valid email.' }),
+  subject: z.string().min(1, { message: 'Subject is required.' }).min(3, { message: 'Subject must be at least 3 characters.' }),
   sentAt: z.date({ required_error: 'A date is required.' }),
   followUpInterval: z.coerce.number().min(1, { message: 'Interval must be at least 1 day.' }),
 });
